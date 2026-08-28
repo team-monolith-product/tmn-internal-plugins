@@ -39,13 +39,28 @@ Claude Code 안에서 최초 한 번 Marketplace를 추가하고 플러그인을
 
 MCP 도구를 처음 사용할 때 admin-rails OAuth로 사내 계정을 인증합니다.
 
+## MCP 연결 주소
+
+플러그인 설정에는 아래 두 주소가 포함됩니다. 둘은 같은 `wfa.codle.io` FastAPI
+서비스에서 제공되며, 경로별로 노출 도구만 분리합니다.
+
+| 용도 | 주소 | 노출 도구 |
+|---|---|---|
+| 전사 지식 검색 | `https://wfa.codle.io/mcp` | `query_knowledge` |
+| 운영 Slack List 작업 | `https://wfa.codle.io/mcp/operate` | `start-slack-list-task`, `publish_slack_task_result` |
+
+두 주소는 플러그인에 이미 설정되어 있어 사용자가 별도로 MCP 주소를 추가하거나 바꿀 필요가 없습니다.
+
 ## 업데이트
 
 Codex:
 
 ```bash
 codex plugin marketplace upgrade team-monolith
+codex plugin add tmn-operating@team-monolith
 ```
+
+업데이트 후 Codex 앱을 다시 실행하고 새 작업을 엽니다.
 
 Claude Code는 Marketplace 자동 업데이트를 켜거나 다음 명령으로 갱신합니다.
 
