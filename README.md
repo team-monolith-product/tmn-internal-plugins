@@ -6,7 +6,7 @@ Team Monolith 구성원에게만 배포하는 Claude·Codex 플러그인 Marketp
 ## 설치 주소
 
 ```text
-https://wfa.codle.io/plugins/tmn-internal-plugins.git
+https://wfa.codle.io/plugins/tmn-operating.git
 ```
 
 ### Codex
@@ -14,7 +14,7 @@ https://wfa.codle.io/plugins/tmn-internal-plugins.git
 최초 한 번 Marketplace를 추가합니다.
 
 ```bash
-codex plugin marketplace add https://wfa.codle.io/plugins/tmn-internal-plugins.git
+codex plugin marketplace add https://wfa.codle.io/plugins/tmn-operating.git
 ```
 
 Codex 앱을 다시 열고 **Plugins → Team Monolith → TMN Operating**에서 설치합니다.
@@ -24,7 +24,7 @@ Codex 앱을 다시 열고 **Plugins → Team Monolith → TMN Operating**에서
 Claude Code 안에서 최초 한 번 Marketplace를 추가하고 플러그인을 설치합니다.
 
 ```text
-/plugin marketplace add https://wfa.codle.io/plugins/tmn-internal-plugins.git
+/plugin marketplace add https://wfa.codle.io/plugins/tmn-operating.git
 /plugin install tmn-operating@team-monolith
 ```
 
