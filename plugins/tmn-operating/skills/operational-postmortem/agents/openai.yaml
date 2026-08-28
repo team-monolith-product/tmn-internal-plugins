@@ -1,0 +1,19 @@
+interface:
+  display_name: "Operational Postmortem"
+  short_description: "운영 실패 원인을 조사하고 개선 작업으로 연결합니다"
+  default_prompt: "Use $operational-postmortem to investigate this operations failure, separate facts from hypotheses, and create only the system improvement work supported by evidence."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "team-monolith-knowledge"
+      description: "과거 운영 기록과 관련 결정·실패 사례를 조사하는 전사 지식 MCP"
+      transport: "streamable_http"
+      url: "https://wfa.codle.io/mcp"
+    - type: "mcp"
+      value: "team-monolith-operations-task"
+      description: "원인 스레드에 포스트모템을 게시하고 개선 작업을 연결하는 운영 MCP"
+      transport: "streamable_http"
+      url: "https://wfa.codle.io/mcp/operate"
+policy:
+  allow_implicit_invocation: true
+
