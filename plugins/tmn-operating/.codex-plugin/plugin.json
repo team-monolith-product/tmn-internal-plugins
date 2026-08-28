@@ -1,6 +1,6 @@
 {
   "name": "tmn-operating",
-  "version": "0.1.0+codex.20260828045514",
+  "version": "0.1.1+codex.20260828163543",
   "description": "전사 데이터를 검색하고 운영팀 Slack List 작업의 시작·상태·요청 맥락·이전 작업 기록·종료 결과를 관리합니다.",
   "author": {
     "name": "Team Monolith"
@@ -9,13 +9,13 @@
   "interface": {
     "displayName": "TMN Operating",
     "shortDescription": "전사 검색과 운영팀 Slack List 작업을 연결합니다.",
-    "longDescription": "전사 지식베이스를 검색하고 운영팀 Slack List 작업을 시작하거나 재개합니다. 요청 맥락, 작업 상태, 이전 작업 기록을 추적하고 종료 결과와 선별한 시행착오·경험을 작업 스레드에 남깁니다.",
+    "longDescription": "전사 지식베이스에서 관련 과거 작업을 먼저 조사하고 운영팀 Slack List 작업을 시작하거나 재개합니다. 요청 맥락과 이전 기록을 대조하고 중요한 모호점을 시작자에게 확인한 뒤, 종료 결과와 필요한 경험을 작업 스레드에 남깁니다.",
     "developerName": "Team Monolith",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
     "defaultPrompt": [
       "사내 과거 대화와 업무 데이터를 검색해줘.",
-      "운영팀 Slack List 작업을 시작하고 이전 맥락과 상태를 파악해줘."
+      "운영팀 Slack List 작업을 시작하고 관련 과거 기록을 조사한 뒤 진행해줘."
     ]
   },
   "mcpServers": "./.mcp.json"
