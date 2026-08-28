@@ -1,2 +1,56 @@
-# tmn-internal-plugins
-Team Monolith internal plugins for Claude and Codex
+# Team Monolith Internal Plugins
+
+Team Monolith 구성원에게만 배포하는 Claude·Codex 플러그인 Marketplace입니다.
+저장소 접근 권한이 있는 사내 GitHub 계정으로만 설치할 수 있습니다.
+
+## 설치 주소
+
+```text
+https://wfa.codle.io/plugins/tmn-internal-plugins.git
+```
+
+### Codex
+
+최초 한 번 Marketplace를 추가합니다.
+
+```bash
+codex plugin marketplace add https://wfa.codle.io/plugins/tmn-internal-plugins.git
+```
+
+Codex 앱을 다시 열고 **Plugins → Team Monolith → TMN Operating**에서 설치합니다.
+
+### Claude Code
+
+Claude Code 안에서 최초 한 번 Marketplace를 추가하고 플러그인을 설치합니다.
+
+```text
+/plugin marketplace add https://wfa.codle.io/plugins/tmn-internal-plugins.git
+/plugin install tmn-operating@team-monolith
+```
+
+설치 후 `/reload-plugins`를 실행합니다.
+
+## 제공 기능
+
+- `query_knowledge`: 사내 과거 업무와 Slack 공개 채널 지식 검색
+- `start-slack-list-task`: Slack List 작업 시작·재개와 요청 맥락·기존 작업 기록 조회
+- `publish_slack_task_result`: 완료·막힘·인계 시 최종 결과와 재사용할 경험 게시
+- `start-operate-task`: 작업 중 대화는 에이전트에 두고, 시작 연결과 종료 결과만 Slack에 남기는 운영 절차
+- `send-docu24-official-document`: 문서24 공문 작성·재작성·검토·발송 절차
+
+MCP 도구를 처음 사용할 때 admin-rails OAuth로 사내 계정을 인증합니다.
+
+## 업데이트
+
+Codex:
+
+```bash
+codex plugin marketplace upgrade team-monolith
+```
+
+Claude Code는 Marketplace 자동 업데이트를 켜거나 다음 명령으로 갱신합니다.
+
+```text
+/plugin marketplace update team-monolith
+/reload-plugins
+```

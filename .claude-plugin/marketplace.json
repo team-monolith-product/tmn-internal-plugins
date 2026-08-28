@@ -1,0 +1,15 @@
+{
+  "name": "team-monolith",
+  "owner": {
+    "name": "Team Monolith"
+  },
+  "description": "Team Monolith 운영팀을 위한 사내 Claude·Codex 플러그인입니다.",
+  "plugins": [
+    {
+      "name": "tmn-operating",
+      "source": "./plugins/tmn-operating",
+      "description": "전사 지식 검색과 운영팀 Slack List 작업을 연결합니다.",
+      "version": "0.1.0"
+    }
+  ]
+}

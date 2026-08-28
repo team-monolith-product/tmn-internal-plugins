@@ -1,0 +1,20 @@
+{
+  "name": "team-monolith",
+  "interface": {
+    "displayName": "Team Monolith"
+  },
+  "plugins": [
+    {
+      "name": "tmn-operating",
+      "source": {
+        "source": "local",
+        "path": "./plugins/tmn-operating"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
