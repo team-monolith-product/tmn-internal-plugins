@@ -1,7 +1,7 @@
 interface:
   display_name: "Start Operations Task"
-  short_description: "과거 기록을 조사한 뒤 운영팀 작업을 시작·종료합니다"
-  default_prompt: "Use $start-operate-task to start or resume this Slack List task, research related prior work, clarify material ambiguity, and publish a concise result only when the work ends."
+  short_description: "착수 조건을 확인하고 리뷰·회고 뒤 작업을 완료합니다"
+  default_prompt: "Use $start-operate-task to research and execute this Slack List task, keep it pending until I approve completion, and run the postmortem check before completing it."
 dependencies:
   tools:
     - type: "mcp"
@@ -11,7 +11,7 @@ dependencies:
       url: "https://wfa.codle.io/mcp"
     - type: "mcp"
       value: "team-monolith-operations-task"
-      description: "운영팀 Slack List 작업을 시작·재개하고 상태·이전 맥락을 읽으며 종료 결과를 게시하는 전용 MCP"
+      description: "운영팀 Slack List 작업을 시작·재개하고 포스트모템·개선 작업·승인된 완료 결과를 게시하는 전용 MCP"
       transport: "streamable_http"
       url: "https://wfa.codle.io/mcp/operate"
 policy:

@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "tmn-operating",
   "displayName": "TMN Operating",
-  "version": "0.1.2",
-  "description": "전사 과거 기록을 먼저 조사하고 중요한 모호점을 확인한 뒤 운영팀 Slack List 작업과 종료 결과를 관리합니다.",
+  "version": "0.2.0",
+  "description": "과거 기록과 착수 조건을 조사하고 운영 실패를 개선 작업으로 연결한 뒤 사용자 승인으로 완료합니다.",
   "author": {
     "name": "Team Monolith"
   },
