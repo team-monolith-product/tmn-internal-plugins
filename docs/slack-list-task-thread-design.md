@@ -38,7 +38,7 @@ flowchart LR
 
     U["운영팀 구성원"] --> A["Claude 또는 Codex<br/>운영 플러그인 설치"]
     A --> S["start-operate-task 스킬<br/>시작·종료 요약"]
-    S --> M["운영팀 전용 Slack Task MCP<br/>별도 배포·allowlist"]
+    S --> M["운영팀 Slack Task MCP<br/>별도 배포·사내 OAuth"]
     M --> L["Slack List 행<br/>상태와 연결의 유일한 원장"]
     L --> C["요청 맥락<br/>왜 생겼는지"]
     L --> W["작업 기록<br/>어떻게 처리했는지"]
@@ -146,7 +146,7 @@ CREATE_SCHEMA = [
 | 배포 단위 | 대상 | 노출 도구 | 권한·비밀값 |
 |---|---|---|---|
 | Knowledge MCP | 전사 | `query_knowledge` | 기존 사내 OAuth, Slack 쓰기 토큰 불필요 |
-| Operations Slack Task MCP | 운영팀 | `start-slack-list-task`, `publish_slack_task_result` | 사내 OAuth + 운영팀 이메일 allowlist + Slack bot token |
+| Operations Slack Task MCP | 운영팀 | `start-slack-list-task`, `publish_slack_task_result` | 사내 OAuth + Slack bot token |
 | TMN Operating Plugin | 운영팀의 Claude·Codex | 두 MCP 연결 + 사내 스킬 | 운영팀에게 설치·업데이트 배포 |
 
 두 MCP는 코드 저장소, 이미지, 공개 도메인과 OAuth 메타데이터를 재사용할 수 있지만 MCP 서버 객체, 경로, 프로세스, 환경 변수, 배포 서비스는 분리한다.
@@ -163,7 +163,7 @@ Knowledge 서비스는 `/mcp`, Operations 서비스는 `/mcp/operate`를 직접 
 - 같은 이름의 message 열이나 작업 기록 링크가 둘 이상이면 기준을 추측하지 않는다.
 - 완료된 행을 시작해도 완료 체크를 자동으로 풀지 않는다.
 - Slack 링크가 가리키는 채널에 봇 권한이 없으면 읽기·쓰기를 시도해 우회하지 않는다.
-- Operations MCP의 운영팀 allowlist에 없는 사내 계정은 인증에 실패한다.
+- Operations MCP는 별도 이메일 허용 목록 없이 admin-rails 인증에 성공한 사내 계정을 허용한다.
 - Knowledge MCP에는 Slack 작업 도구와 Slack bot token 의존성이 없다.
 - 루트 게시 후 List 셀 쓰기가 실패하면 `[시작]` 메시지의 List 링크로 수동 복구할 수 있다. 자동 보정은 실제 장애가 반복될 때 추가한다.
 
@@ -171,7 +171,7 @@ Knowledge 서비스는 `/mcp`, Operations 서비스는 `/mcp/operate`를 직접 
 
 - `service/slack_task_list.py`: 새 List에 두 message 열을 만들되, 기존 채널 라우팅 모델은 유지
 - `service/slack_task_thread.py`: List URL만으로 스키마·행·스레드를 읽고 작업 기록을 갱신
-- `app/slack_task_mcp.py`: 운영팀 전용 MCP 도구 2개와 allowlist 인증
+- `app/slack_task_mcp.py`: 운영팀 MCP 도구 2개와 admin-rails 인증
 - `operations_task_main.py`: 운영팀 MCP 독립 진입점
 - `plugins/tmn-operating`: 전사 검색·운영 작업 MCP 연결과 사내 스킬
 - 테스트: 스키마 직접 발견, 링크 분리, 기존 작업 재사용, 동시 시작, 완료 상태 보호

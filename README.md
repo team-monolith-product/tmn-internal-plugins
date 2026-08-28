@@ -36,7 +36,6 @@ Claude Code 안에서 최초 한 번 Marketplace를 추가하고 플러그인을
 - `start-slack-list-task`: Slack List 작업 시작·재개와 요청 맥락·기존 작업 기록 조회
 - `publish_slack_task_result`: 완료·막힘·인계 시 최종 결과와 재사용할 경험 게시
 - `start-operate-task`: 작업 중 대화는 에이전트에 두고, 시작 연결과 종료 결과만 Slack에 남기는 운영 절차
-- `send-docu24-official-document`: 문서24 공문 작성·재작성·검토·발송 절차
 
 MCP 도구를 처음 사용할 때 admin-rails OAuth로 사내 계정을 인증합니다.
 
