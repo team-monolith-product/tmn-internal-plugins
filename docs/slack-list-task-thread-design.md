@@ -38,7 +38,7 @@ flowchart LR
 
     U["운영팀 구성원"] --> A["Claude 또는 Codex<br/>운영 플러그인 설치"]
     A --> S["start-operate-task 스킬<br/>시작·종료 요약"]
-    S --> M["운영팀 Slack Task MCP<br/>별도 배포·사내 OAuth"]
+    S --> M["운영팀 Slack Task MCP<br/>/mcp/operate·사내 OAuth"]
     M --> L["Slack List 행<br/>상태와 연결의 유일한 원장"]
     L --> C["요청 맥락<br/>왜 생겼는지"]
     L --> W["작업 기록<br/>어떻게 처리했는지"]
@@ -141,19 +141,19 @@ CREATE_SCHEMA = [
 
 비밀값, 로컬 절대경로, 내부 추론, 도구 원문은 게시하지 않는다.
 
-## 전사용 지식과 운영팀 작업의 배포 분리
+## 전사용 지식과 운영팀 작업의 책임 분리
 
-| 배포 단위 | 대상 | 노출 도구 | 권한·비밀값 |
+| MCP 엔드포인트 | 대상 | 노출 도구 | 권한·비밀값 |
 |---|---|---|---|
 | Knowledge MCP | 전사 | `query_knowledge` | 기존 사내 OAuth, Slack 쓰기 토큰 불필요 |
 | Operations Slack Task MCP | 운영팀 | `start-slack-list-task`, `publish_slack_task_result` | 사내 OAuth + Slack bot token |
 | TMN Operating Plugin | 운영팀의 Claude·Codex | 두 MCP 연결 + 사내 스킬 | 운영팀에게 설치·업데이트 배포 |
 
-두 MCP는 코드 저장소, 이미지, 공개 도메인과 OAuth 메타데이터를 재사용할 수 있지만 MCP 서버 객체, 경로, 프로세스, 환경 변수, 배포 서비스는 분리한다.
+두 MCP는 한 FastAPI 프로세스와 하나의 배포 서비스를 공유한다. MCP 서버 객체와 경로는 분리해 Knowledge는 `/mcp`, Operations는 `/mcp/operate`에서만 각각의 도구를 노출한다.
 
 플러그인은 운영팀에게 두 MCP 연결을 한 번에 설치한다. Knowledge MCP는 `https://wfa.codle.io/mcp`, Operations MCP는 `https://wfa.codle.io/mcp/operate`를 사용한다. 공개 도메인과 로그인 흐름은 공유하지만 서로 다른 MCP 엔드포인트이므로 전사 검색과 운영팀 쓰기 권한은 섞이지 않는다.
 
-Knowledge 서비스는 `/mcp`, Operations 서비스는 `/mcp/operate`를 직접 제공한다. Ingress는 같은 `wfa.codle.io` 호스트에서 경로에 따라 두 서비스로 라우팅한다. 두 서비스의 `*_MCP_RESOURCE_URL`은 경로를 제외한 `https://wfa.codle.io`로 두어 공용 `/.well-known/oauth-protected-resource` 메타데이터를 사용한다.
+기존 `/` Ingress는 한 FastAPI 서비스로 요청을 보낸다. 서비스 내부의 경로 디스패처가 `/mcp`와 `/mcp/operate`를 각 MCP 앱에 전달하고, 나머지 FastAPI 경로도 그대로 제공한다. 두 MCP는 공용 `MCP_RESOURCE_URL=https://wfa.codle.io`과 `/.well-known/oauth-protected-resource` 메타데이터를 사용한다. Operations MCP는 이미 주입된 `SLACK_BOT_TOKEN`을 재사용하며 별도 Slack 토큰 환경변수나 시크릿 매핑을 만들지 않는다.
 
 ## 예외와 실패 원칙
 
@@ -164,7 +164,7 @@ Knowledge 서비스는 `/mcp`, Operations 서비스는 `/mcp/operate`를 직접 
 - 완료된 행을 시작해도 완료 체크를 자동으로 풀지 않는다.
 - Slack 링크가 가리키는 채널에 봇 권한이 없으면 읽기·쓰기를 시도해 우회하지 않는다.
 - Operations MCP는 별도 이메일 허용 목록 없이 admin-rails 인증에 성공한 사내 계정을 허용한다.
-- Knowledge MCP에는 Slack 작업 도구와 Slack bot token 의존성이 없다.
+- Knowledge MCP는 Slack 작업 도구와 Slack API 호출을 하지 않는다.
 - 루트 게시 후 List 셀 쓰기가 실패하면 `[시작]` 메시지의 List 링크로 수동 복구할 수 있다. 자동 보정은 실제 장애가 반복될 때 추가한다.
 
 ## 구현 대상
@@ -172,7 +172,8 @@ Knowledge 서비스는 `/mcp`, Operations 서비스는 `/mcp/operate`를 직접 
 - `service/slack_task_list.py`: 새 List에 두 message 열을 만들되, 기존 채널 라우팅 모델은 유지
 - `service/slack_task_thread.py`: List URL만으로 스키마·행·스레드를 읽고 작업 기록을 갱신
 - `app/slack_task_mcp.py`: 운영팀 MCP 도구 2개와 admin-rails 인증
-- `operations_task_main.py`: 운영팀 MCP 독립 진입점
+- `app/mcp_dispatcher.py`: `/mcp`와 `/mcp/operate`를 각 MCP 앱으로 전달
+- `main.py`: 두 MCP의 세션 관리와 단일 FastAPI 애플리케이션 기동
 - `plugins/tmn-operating`: 전사 검색·운영 작업 MCP 연결과 사내 스킬
 - 테스트: 스키마 직접 발견, 링크 분리, 기존 작업 재사용, 동시 시작, 완료 상태 보호
 
@@ -193,5 +194,6 @@ DB migration은 구현 대상에 없다.
 11. 시행착오·경험은 최대 3개이며 비밀값·로컬 경로·도구 원문은 거절한다.
 12. Knowledge MCP는 `query_knowledge`만, Operations MCP는 Slack 작업 도구 2개만 노출한다.
 13. 736px와 360px 시연에서 요청 맥락 없는 신규 생성은 막히고, 기존 작업 재개는 허용된다.
+14. 단일 FastAPI 서비스에서 `/mcp`와 `/mcp/operate`가 각각 인증과 도구 목록을 올바르게 제공한다.
 
 이 기준을 현재 구현과 배포 검증의 기준으로 사용한다.
