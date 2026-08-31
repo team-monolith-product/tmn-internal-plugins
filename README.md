@@ -37,6 +37,10 @@ Claude Code 안에서 최초 한 번 Marketplace를 추가하고 플러그인을
 - `publish_slack_task_result`: 완료·막힘·인계 시 최종 결과와 재사용할 경험 게시
 - `start-operate-task`: 작업 중 대화는 에이전트에 두고, 시작 연결과 종료 결과만 Slack에 남기는 운영 절차
 
+운영 작업의 서비스·모델·Effort·전체 경과시간과 루트/서브에이전트 토큰은
+Codex·Claude 훅이 자동 수집해 분석용 DB에 기록합니다. 이 정보는 공동 작업용 Slack
+메시지에는 표시하지 않습니다. 프롬프트와 응답 본문은 수집하거나 저장하지 않습니다.
+
 MCP 도구를 처음 사용할 때 admin-rails OAuth로 사내 계정을 인증합니다.
 
 ## MCP 연결 주소
