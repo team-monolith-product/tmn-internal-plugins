@@ -1,0 +1,40 @@
+{
+  "description": "운영 Slack List 작업의 모델·토큰 사용량을 완료 도구에 자동 첨부합니다.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/collect_task_execution.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*(start[-_]slack[-_]list[-_]task|publish[-_]slack[-_]task[-_]result)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/collect_task_execution.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*publish[-_]slack[-_]task[-_]result$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/collect_task_execution.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
