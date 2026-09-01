@@ -9,7 +9,7 @@
       "name": "tmn-operating",
       "source": "./plugins/tmn-operating",
       "description": "전사 과거 기록을 조사한 뒤 운영팀 Slack List 작업을 진행합니다.",
-      "version": "0.1.2"
+      "version": "0.1.3"
     }
   ]
 }

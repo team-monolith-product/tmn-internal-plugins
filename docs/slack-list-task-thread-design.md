@@ -9,9 +9,8 @@
 - Slack List 행이 작업 상태와 스레드 관계의 유일한 원장이다.
 - `task_list_work_thread` 같은 별도 테이블이나 `agent_task_session`은 만들지 않는다.
 - 이번 PR에서 `migrations/knowledge/006_task_list_work_thread.sql`을 제거한다.
-- 새 운영팀 MCP는 기존 `channel_task_list`를 조회하거나 갱신하지 않는다.
-- 기존 `channel_task_list`는 Slack 봇이 채널의 새 요청을 어느 List에 넣을지 정하는 예전 라우팅 설정으로만 유지한다.
-- PostgreSQL은 같은 행에서 작업 루트를 동시에 두 개 만드는 일을 막는 advisory lock에만 쓴다. 잠금은 관계나 작업 상태를 저장하지 않는다.
+- 기존 `channel_task_list`를 채널과 List를 연결하는 공용 라우팅 설정으로 재사용한다. 새 작업의 대상 후보를 보여주고, 요청 맥락 없는 행의 작업 채널을 찾는 데도 같은 설정을 쓴다.
+- PostgreSQL에는 새 작업 상태를 저장하지 않는다. 기존 라우팅 설정과 같은 행에서 작업 루트를 동시에 두 개 만드는 일을 막는 advisory lock만 사용한다.
 
 작업 ID는 Slack의 `(list_id, record_id)`를 그대로 사용한다.
 
@@ -26,7 +25,7 @@
 - `작업 기록`에는 하나의 루트 스레드만 둔다. Claude와 Codex 모두 같은 링크를 사용한다.
 - 새 작업 스레드는 첫 번째로 해석 가능한 `요청 맥락` 메시지와 같은 채널에 만든다.
 - `작업 기록`이 이미 있으면 `요청 맥락`이 없거나 깨져도 기존 작업을 재개할 수 있다.
-- `작업 기록`이 비어 있는데 유효한 `요청 맥락`도 없으면 생성할 채널을 추측하지 않고 중단한다.
+- `작업 기록`이 비어 있는데 유효한 `요청 맥락`도 없으면 해당 List가 등록된 채널에 만든다. 등록이 없거나 여러 채널로 모호하면 중단한다.
 
 ## 데이터와 책임
 
@@ -46,7 +45,7 @@ flowchart LR
     W --> WT["공용 작업 스레드<br/>시작 연결·최종 결과"]
     S --> O["코드·문서·시트<br/>실제 산출물"]
     O -. "결과 링크" .-> WT
-    M -. "중복 생성 방지 잠금만" .-> DB["PostgreSQL advisory lock"]
+    M -. "기존 채널↔List 라우팅·중복 생성 방지 잠금" .-> DB["PostgreSQL"]
 ```
 
 | 정보 | 단일 원본 |
@@ -70,9 +69,12 @@ flowchart TD
     K --> Q{"다른 요청이 먼저 만들었나?"}
     Q -- 예 --> WR
     Q -- 아니요 --> C{"유효한 요청 맥락 링크가 있나?"}
-    C -- 아니요 --> B["중단: 생성할 채널을 추측하지 않음"]
-    C -- 예 --> N["요청 맥락 채널에 [시작] 루트 생성"]
+    C -- 아니요 --> D{"List에 등록된 채널이 하나인가?"}
+    D -- 아니요 --> B["중단: 채널 등록 확인 필요"]
+    D -- 예 --> N["등록 채널에 [시작] 루트 생성"]
+    C -- 예 --> N2["요청 맥락 채널에 [시작] 루트 생성"]
     N --> V["작업 기록 셀에 permalink 저장"]
+    N2 --> V
     V --> R["List + 요청 맥락 + 작업 기록 반환"]
     WR --> R
     R --> X["Claude·Codex 안에서 작업과 대화 계속"]
@@ -107,13 +109,25 @@ CREATE_SCHEMA = [
 
 ## 운영팀 MCP 동작
 
+### `list_slack_task_channels`
+
+- 기존 `channel_task_list`에 등록된 채널의 이름과 ID를 반환한다.
+- 행 링크가 없는 작업은 이 후보를 사용자에게 보여주고 생성 여부와 대상 채널을 선택받는다.
+
+### `create_slack_list_task`
+
+- 입력: 사용자가 선택한 `channel_id`, 제목, 확정된 `due_date`
+- 사용자가 마감일을 주지 않았다면 스킬이 과거 작업의 선행 기간과 현재 행사 일정을 먼저 조사한다.
+- 선택된 채널에 이미 연결된 List 생성 경로를 재사용하고 새 라우팅이나 List는 만들지 않는다.
+
 ### `start-slack-list-task`
 
 - 입력: `list_url`
 - List 전체 스키마와 해당 행을 Slack에서 직접 읽는다.
 - `작업 기록`이 있으면 새 메시지를 만들지 않고 그 스레드를 재사용한다.
 - `작업 기록`이 없으면 advisory lock을 잡고 행을 다시 읽는다.
-- 여전히 비어 있으면 첫 유효한 `요청 맥락` 채널에 `[시작]` 루트를 만들고 permalink를 `작업 기록` 셀에 쓴다.
+- 여전히 비어 있으면 첫 유효한 `요청 맥락` 채널에 `[시작]` 루트를 만든다. 요청 맥락이 없으면 해당 List가 등록된 채널을 사용한다.
+- 생성한 permalink를 `작업 기록` 셀에 쓴다.
 - List 필드, 요청 맥락 대화, 작업 기록 대화, 생성·재사용 여부를 반환한다.
 
 ### `publish_slack_task_result`
@@ -146,7 +160,7 @@ CREATE_SCHEMA = [
 | MCP 엔드포인트 | 대상 | 노출 도구 | 권한·비밀값 |
 |---|---|---|---|
 | Knowledge MCP | 전사 | `query_knowledge` | 기존 사내 OAuth, Slack 쓰기 토큰 불필요 |
-| Operations Slack Task MCP | 운영팀 | `start-slack-list-task`, `publish_slack_task_result` | 사내 OAuth + Slack bot token |
+| Operations Slack Task MCP | 운영팀 | `list_slack_task_channels`, `create_slack_list_task`, `start-slack-list-task`, `record_slack_task_references`, `publish_slack_task_result` | 사내 OAuth + Slack bot token |
 | TMN Operating Plugin | 운영팀의 Claude·Codex | 두 MCP 연결 + 사내 스킬 | 운영팀에게 설치·업데이트 배포 |
 
 두 MCP는 한 FastAPI 프로세스와 하나의 배포 서비스를 공유한다. MCP 서버 객체와 경로는 분리해 Knowledge는 `/mcp`, Operations는 `/mcp/operate`에서만 각각의 도구를 노출한다.
@@ -157,7 +171,7 @@ CREATE_SCHEMA = [
 
 ## 예외와 실패 원칙
 
-- `작업 기록`이 없고 유효한 `요청 맥락`도 없으면 새 스레드를 만들지 않는다.
+- `작업 기록`과 유효한 `요청 맥락`이 모두 없으면 List에 등록된 채널을 사용한다. 등록이 없거나 여러 채널이면 새 스레드를 만들지 않는다.
 - `작업 기록`이 이미 있으면 깨진 요청 맥락은 `error`와 함께 반환하고 작업 기록은 계속 읽는다.
 - `작업 기록` 열이 없으면 원본 열을 대신 쓰지 않고 중단한다.
 - 같은 이름의 message 열이나 작업 기록 링크가 둘 이상이면 기준을 추측하지 않는다.
@@ -171,7 +185,7 @@ CREATE_SCHEMA = [
 
 - `service/slack_task_list.py`: 새 List에 두 message 열을 만들되, 기존 채널 라우팅 모델은 유지
 - `service/slack_task_thread.py`: List URL만으로 스키마·행·스레드를 읽고 작업 기록을 갱신
-- `app/slack_task_mcp.py`: 운영팀 MCP 도구 2개와 admin-rails 인증
+- `app/slack_task_mcp.py`: 운영팀 MCP 도구 5개와 admin-rails 인증
 - `app/mcp_dispatcher.py`: `/mcp`와 `/mcp/operate`를 각 MCP 앱으로 전달
 - `main.py`: 두 MCP의 세션 관리와 단일 FastAPI 애플리케이션 기동
 - `plugins/tmn-operating`: 전사 검색·운영 작업 MCP 연결과 사내 스킬
@@ -182,18 +196,18 @@ DB migration은 구현 대상에 없다.
 ## 검증 기준
 
 1. `migrations/knowledge/006_task_list_work_thread.sql`이 PR에 없다.
-2. 운영팀 MCP 코드가 `channel_task_list`를 읽거나 쓰지 않는다.
+2. 새 채널↔List 저장소 없이 기존 `channel_task_list` 라우팅을 재사용한다.
 3. Slack 대화에서 만든 작업은 원본 링크가 `요청 맥락`에만 들어간다.
 4. 새 작업 기록은 요청 맥락과 같은 채널에 생성되고 permalink가 `작업 기록`에만 저장된다.
 5. 기존 작업 기록이 있으면 요청 맥락이 없어도 같은 스레드를 재사용한다.
-6. 새 작업 기록이 필요한데 요청 맥락이 없으면 명확히 중단한다.
+6. 새 작업 기록이 필요한데 요청 맥락이 없으면 해당 List에 등록된 유일한 채널을 사용하고, 등록이 없거나 모호하면 명확히 중단한다.
 7. 같은 행을 동시에 시작해도 작업 루트와 permalink가 하나만 생긴다.
 8. 일반 대화와 중간 결정은 어느 Slack 스레드에도 추가되지 않는다.
 9. 기존 List의 `작업 기록` 열을 `items.info` 스키마로 발견한다.
 10. `mark_completed=false`면 결과를 남겨도 List 완료 체크는 유지된다.
 11. 시행착오·경험은 최대 3개이며 비밀값·로컬 경로·도구 원문은 거절한다.
-12. Knowledge MCP는 `query_knowledge`만, Operations MCP는 Slack 작업 도구 2개만 노출한다.
-13. 736px와 360px 시연에서 요청 맥락 없는 신규 생성은 막히고, 기존 작업 재개는 허용된다.
+12. Knowledge MCP는 `query_knowledge`만, Operations MCP는 Slack 작업 도구 5개만 노출한다.
+13. 행 링크가 없으면 등록 채널 목록을 보여주고 사용자의 생성 동의와 채널 선택을 받은 뒤에만 행을 만든다.
 14. 단일 FastAPI 서비스에서 `/mcp`와 `/mcp/operate`가 각각 인증과 도구 목록을 올바르게 제공한다.
 
 이 기준을 현재 구현과 배포 검증의 기준으로 사용한다.
