@@ -33,8 +33,10 @@ Claude Code 안에서 최초 한 번 Marketplace를 추가하고 플러그인을
 ## 제공 기능
 
 - `query_knowledge`: 사내 과거 업무와 Slack 공개 채널 지식 검색
-- `create_slack_list_task`: 확인받은 새 작업을 운영 Slack List에 생성
+- `list_slack_task_channels`: 작업 List가 등록된 채널 후보 조회
+- `create_slack_list_task`: 선택받은 채널의 운영 Slack List에 확인받은 새 작업 생성
 - `start-slack-list-task`: Slack List 작업 시작·재개와 요청 맥락·기존 작업 기록 조회
+- `record_slack_task_references`: 실제 판단에 사용한 조사 근거 기록
 - `publish_slack_task_result`: 완료·막힘·인계 시 최종 결과와 재사용할 경험 게시
 - `start-operate-task`: 작업 중 대화는 에이전트에 두고, 시작 연결과 종료 결과만 Slack에 남기는 운영 절차
 
@@ -48,7 +50,7 @@ MCP 도구를 처음 사용할 때 admin-rails OAuth로 사내 계정을 인증�
 | 용도 | 주소 | 노출 도구 |
 |---|---|---|
 | 전사 지식 검색 | `https://wfa.codle.io/mcp` | `query_knowledge` |
-| 운영 Slack List 작업 | `https://wfa.codle.io/mcp/operate` | `create_slack_list_task`, `start-slack-list-task`, `publish_slack_task_result` |
+| 운영 Slack List 작업 | `https://wfa.codle.io/mcp/operate` | `list_slack_task_channels`, `create_slack_list_task`, `start-slack-list-task`, `record_slack_task_references`, `publish_slack_task_result` |
 
 두 주소는 플러그인에 이미 설정되어 있어 사용자가 별도로 MCP 주소를 추가하거나 바꿀 필요가 없습니다.
 
