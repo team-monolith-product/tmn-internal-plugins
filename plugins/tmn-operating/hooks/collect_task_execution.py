@@ -15,27 +15,25 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, NamedTuple
 
 COLLECTOR_VERSION = "tmn-operating/0.1.3"
 START_TOOL = "start_slack_list_task"
 PUBLISH_TOOL = "publish_slack_task_result"
-TOKEN_FIELDS = (
-    "input_tokens",
-    "cached_input_tokens",
-    "cache_write_input_tokens",
-    "output_tokens",
-    "reasoning_output_tokens",
-    "total_tokens",
-)
+# ponytail: 범주별 토큰은 의사결정에 실제 필요해질 때만 수집한다.
 
 
-def normalized_tool_name(name: str) -> str:
-    return name.lower().replace("-", "_")
+class UsageKey(NamedTuple):
+    model: str | None
+    effort: str | None
+    is_subagent: bool
+
+
+UsageGroups = dict[UsageKey, int]
 
 
 def tool_is(name: str, expected: str) -> bool:
-    return normalized_tool_name(name).endswith(expected)
+    return name.lower().replace("-", "_").endswith(expected)
 
 
 def state_root() -> Path:
@@ -92,7 +90,10 @@ def iter_json_lines(path: Path, offset: int = 0) -> Iterable[dict[str, Any] | No
     try:
         with path.open("rb") as stream:
             size = path.stat().st_size
-            stream.seek(offset if 0 <= offset <= size else 0)
+            actual_offset = offset if 0 <= offset <= size else 0
+            if actual_offset != offset:
+                yield None
+            stream.seek(actual_offset)
             for raw_line in stream:
                 try:
                     value = json.loads(raw_line)
@@ -101,6 +102,8 @@ def iter_json_lines(path: Path, offset: int = 0) -> Iterable[dict[str, Any] | No
                     continue
                 if isinstance(value, dict):
                     yield value
+                else:
+                    yield None
     except OSError:
         yield None
 
@@ -190,9 +193,6 @@ def capture_baseline(payload: dict[str, Any]) -> dict[str, Any]:
         except OSError:
             continue
     return {
-        "service": detect_service(payload),
-        "session_id": str(payload["session_id"]),
-        "transcript_path": str(payload.get("transcript_path") or ""),
         "captured_at": captured_at,
         "offsets": offsets,
         "model": payload.get("model"),
@@ -205,9 +205,9 @@ def task_execution_id(
     """같은 게시 재시도는 묶고, 같은 세션의 재개 실행은 분리합니다."""
     value = digest(
         detect_service(payload),
-        str(payload['session_id']),
+        str(payload["session_id"]),
         list_url,
-        str(baseline.get('captured_at') or 0),
+        str(baseline.get("captured_at") or 0),
     )
     return f"run-{value}"
 
@@ -221,68 +221,18 @@ def bind_task(payload: dict[str, Any]) -> None:
         return
     baseline = read_json(prompt_state_path(payload)) or capture_baseline(payload)
     baseline |= {
-        "list_url": list_url,
         "execution_id": task_execution_id(payload, list_url, baseline),
     }
     write_json(path, baseline)
 
 
-def add_usage(
-    groups: dict[tuple[str | None, str | None, bool], dict[str, Any]],
-    *,
-    model: str | None,
-    effort: str | None,
-    is_subagent: bool,
-    agent: str,
-    usage: dict[str, int],
-) -> None:
-    key = (model, effort, is_subagent)
-    group = groups.setdefault(
-        key,
-        {
-            "model": model,
-            "reasoning_effort": effort,
-            "is_subagent": is_subagent,
-            "agents": set(),
-            "conversation_turns": 0,
-            **{field: 0 for field in TOKEN_FIELDS},
-        },
-    )
-    group["agents"].add(agent)
-    for field in TOKEN_FIELDS:
-        group[field] += int(usage.get(field) or 0)
-    group["conversation_turns"] += 1
-
-
-def render_groups(
-    groups: dict[tuple[str | None, str | None, bool], dict[str, Any]],
-) -> list[dict[str, Any]]:
-    rendered = []
-    for group in groups.values():
-        values = dict(group)
-        values["agent_count"] = len(values.pop("agents")) or 1
-        rendered.append(values)
-    return sorted(
-        rendered,
-        key=lambda item: (
-            item["is_subagent"],
-            str(item["model"] or ""),
-            str(item["reasoning_effort"] or ""),
-        ),
-    )
-
-
-def codex_file_role(path: Path) -> bool:
-    return (first_codex_meta(path) or {}).get("thread_source") != "user"
-
-
 def collect_codex(
     paths: list[Path], offsets: dict[str, int], fallback_model: str | None
-) -> tuple[list[dict[str, Any]], bool]:
-    groups: dict[tuple[str | None, str | None, bool], dict[str, Any]] = {}
+) -> tuple[UsageGroups, bool]:
+    groups: UsageGroups = {}
     malformed = False
     for path in paths:
-        is_subagent = codex_file_role(path)
+        is_subagent = (first_codex_meta(path) or {}).get("thread_source") != "user"
         model = fallback_model if not is_subagent else None
         effort = None
         for record in iter_json_lines(path, int(offsets.get(str(path), 0))):
@@ -300,50 +250,41 @@ def collect_codex(
             if event.get("type") != "token_count":
                 continue
             raw = (event.get("info") or {}).get("last_token_usage") or {}
-            usage = {
-                "input_tokens": int(raw.get("input_tokens") or 0),
-                "cached_input_tokens": int(raw.get("cached_input_tokens") or 0),
-                "cache_write_input_tokens": int(
-                    raw.get("cache_write_input_tokens") or 0
-                ),
-                "output_tokens": int(raw.get("output_tokens") or 0),
-                "reasoning_output_tokens": int(raw.get("reasoning_output_tokens") or 0),
-                "total_tokens": int(raw.get("total_tokens") or 0),
-            }
-            add_usage(
-                groups,
-                model=model,
-                effort=effort,
-                is_subagent=is_subagent,
-                agent=str(path),
-                usage=usage,
-            )
-    return render_groups(groups), malformed
+            if raw.get("total_tokens") is None:
+                malformed = True
+                continue
+            try:
+                total_tokens = int(raw["total_tokens"])
+            except (TypeError, ValueError):
+                malformed = True
+                continue
+            key = UsageKey(model, effort, is_subagent)
+            groups[key] = groups.get(key, 0) + total_tokens
+    return groups, malformed
 
 
-def claude_usage(raw: dict[str, Any]) -> dict[str, int]:
-    uncached = int(raw.get("input_tokens") or 0)
-    cached = int(raw.get("cache_read_input_tokens") or 0)
-    cache_write = int(raw.get("cache_creation_input_tokens") or 0)
-    output = int(raw.get("output_tokens") or 0)
-    reasoning = int(
-        (raw.get("output_tokens_details") or {}).get("thinking_tokens") or 0
-    )
-    input_total = uncached + cached + cache_write
-    return {
-        "input_tokens": input_total,
-        "cached_input_tokens": cached,
-        "cache_write_input_tokens": cache_write,
-        "output_tokens": output,
-        "reasoning_output_tokens": reasoning,
-        "total_tokens": input_total + output,
-    }
+def claude_total_tokens(raw: dict[str, Any]) -> int | None:
+    values = [
+        raw.get(field)
+        for field in (
+            "input_tokens",
+            "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+            "output_tokens",
+        )
+    ]
+    if not any(value is not None for value in values):
+        return None
+    try:
+        return sum(int(value or 0) for value in values)
+    except (TypeError, ValueError):
+        return None
 
 
 def collect_claude(
     paths: list[Path], offsets: dict[str, int], fallback_model: str | None
-) -> tuple[list[dict[str, Any]], bool]:
-    groups: dict[tuple[str | None, str | None, bool], dict[str, Any]] = {}
+) -> tuple[UsageGroups, bool]:
+    groups: UsageGroups = {}
     seen_messages: set[tuple[str, str]] = set()
     malformed = False
     for path in paths:
@@ -362,22 +303,15 @@ def collect_claude(
                 continue
             seen_messages.add(identity)
             model = message.get("model") or fallback_model
-            usage = claude_usage(raw_usage)
-            if model == "<synthetic>" and usage["total_tokens"] == 0:
+            total_tokens = claude_total_tokens(raw_usage)
+            if total_tokens is None:
+                malformed = True
                 continue
-            add_usage(
-                groups,
-                model=model,
-                effort=record.get("effort"),
-                is_subagent=is_subagent,
-                agent=str(path),
-                usage=usage,
-            )
-    return render_groups(groups), malformed
-
-
-def sum_usage(groups: list[dict[str, Any]], field: str) -> int:
-    return sum(int(group.get(field) or 0) for group in groups)
+            if model == "<synthetic>" and total_tokens == 0:
+                continue
+            key = UsageKey(model, record.get("effort"), is_subagent)
+            groups[key] = groups.get(key, 0) + total_tokens
+    return groups, malformed
 
 
 def collect_publish_metadata(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -393,7 +327,6 @@ def collect_publish_metadata(payload: dict[str, Any]) -> dict[str, Any] | None:
     if state is None:
         state = read_json(prompt_state_path(payload)) or capture_baseline(payload)
         state |= {
-            "list_url": list_url,
             "execution_id": task_execution_id(payload, list_url, state),
         }
         write_json(task_state_path(payload, list_url), state)
@@ -410,23 +343,15 @@ def collect_publish_metadata(payload: dict[str, Any]) -> dict[str, Any] | None:
     else:
         groups, malformed = collect_codex(paths, offsets, fallback_model)
 
-    root_groups = [group for group in groups if not group["is_subagent"]]
-    primary = max(
-        root_groups or groups, key=lambda item: item["total_tokens"], default={}
-    )
+    root_groups = {key: total for key, total in groups.items() if not key.is_subagent}
+    candidates = root_groups or groups
+    primary = max(candidates, key=candidates.get, default=None)
     status = "unavailable" if not groups else "partial" if malformed else "complete"
     return {
         "execution_id": state["execution_id"],
-        "model": primary.get("model") or fallback_model,
-        "reasoning_effort": primary.get("reasoning_effort"),
-        "input_tokens": sum_usage(groups, "input_tokens"),
-        "cached_input_tokens": sum_usage(groups, "cached_input_tokens"),
-        "cache_write_input_tokens": sum_usage(groups, "cache_write_input_tokens"),
-        "output_tokens": sum_usage(groups, "output_tokens"),
-        "reasoning_output_tokens": sum_usage(groups, "reasoning_output_tokens"),
-        "total_tokens": sum_usage(groups, "total_tokens"),
-        "conversation_turns": sum_usage(root_groups, "conversation_turns"),
-        "usage_by_model": groups or None,
+        "model": primary.model if primary and primary.model else fallback_model,
+        "reasoning_effort": primary.effort if primary else None,
+        "total_tokens": sum(groups.values()) if groups else None,
         "collector_version": COLLECTOR_VERSION,
         "collection_status": status,
     }

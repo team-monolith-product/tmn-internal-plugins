@@ -137,13 +137,9 @@ class CollectTaskExecutionTest(unittest.TestCase):
         collector.write_json(
             collector.task_state_path(payload, payload["tool_input"]["list_url"]),
             {
-                "service": "Codex",
-                "session_id": session_id,
-                "transcript_path": str(root),
                 "captured_at": time.time() - 5,
                 "offsets": {str(root): root_offset},
                 "model": "fallback",
-                "list_url": payload["tool_input"]["list_url"],
                 "execution_id": "run-test",
             },
         )
@@ -151,18 +147,11 @@ class CollectTaskExecutionTest(unittest.TestCase):
         metadata = collector.collect_publish_metadata(payload)
 
         self.assertEqual(metadata["total_tokens"], 190)
-        self.assertEqual(metadata["input_tokens"], 160)
         self.assertEqual(metadata["model"], "gpt-root")
         self.assertEqual(metadata["reasoning_effort"], "high")
         self.assertEqual(metadata["collection_status"], "complete")
-        self.assertEqual(len(metadata["usage_by_model"]), 2)
-        subagent_usage = next(
-            group for group in metadata["usage_by_model"] if group["is_subagent"]
-        )
-        self.assertEqual(subagent_usage["model"], "gpt-sub")
-        self.assertEqual(subagent_usage["total_tokens"], 70)
 
-    def test_claude_deduplicates_streamed_messages_and_cache_tokens(self) -> None:
+    def test_claude_deduplicates_streamed_messages(self) -> None:
         root = Path(self.temporary.name) / ".claude" / "projects" / "task.jsonl"
         root.parent.mkdir(parents=True)
         root.write_bytes(json_line({"type": "system"}))
@@ -189,14 +178,31 @@ class CollectTaskExecutionTest(unittest.TestCase):
         groups, malformed = collector.collect_claude([root], {str(root): offset}, None)
 
         self.assertFalse(malformed)
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0]["input_tokens"], 35)
-        self.assertEqual(groups[0]["cached_input_tokens"], 20)
-        self.assertEqual(groups[0]["cache_write_input_tokens"], 5)
-        self.assertEqual(groups[0]["output_tokens"], 7)
-        self.assertEqual(groups[0]["reasoning_output_tokens"], 3)
-        self.assertEqual(groups[0]["total_tokens"], 42)
-        self.assertEqual(groups[0]["conversation_turns"], 1)
+        self.assertEqual(groups, {collector.UsageKey("claude-test", "max", False): 42})
+        self.assertIsNone(collector.claude_total_tokens({}))
+        self.assertIsNone(collector.claude_total_tokens({"input_tokens": "unknown"}))
+
+    def test_missing_usage_is_unavailable_not_zero(self) -> None:
+        transcript = Path(self.temporary.name) / "rollout.jsonl"
+        transcript.write_bytes(
+            json_line(
+                {
+                    "type": "session_meta",
+                    "payload": {"session_id": "empty", "thread_source": "user"},
+                }
+            )
+        )
+        payload = {
+            "session_id": "empty",
+            "transcript_path": str(transcript),
+            "model": "gpt-test",
+            "tool_input": {"list_url": "https://slack.example/list/row"},
+        }
+
+        metadata = collector.collect_publish_metadata(payload)
+
+        self.assertIsNone(metadata["total_tokens"])
+        self.assertEqual(metadata["collection_status"], "unavailable")
 
     def test_publish_retry_is_denied_without_auto_approval(self) -> None:
         output = collector.deny_for_retry({"execution_id": "run-test"})
